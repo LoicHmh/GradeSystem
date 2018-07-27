@@ -17,7 +17,7 @@ from PyQt5.QtCore import Qt, QCoreApplication
 
 
 ########################################
-# Rule
+# Rule for GPA
 ########################################
 def credit_rule(score):
     if score >= 95 and score <= 100:
@@ -97,9 +97,6 @@ class Config():
     def set_output_path(self, output_path):
         self.output_path = output_path
 
-    def set_student_list_path(self, student_list_path):
-        self.student_list_path = student_list_path
-
     def set_cal_gpa(self, cal_gpa):
         self.cal_gpa = cal_gpa
 
@@ -116,7 +113,7 @@ class Semester:
     ''' A semester contains the year of start, the year of end and its number.
 
         Arguments:
-            # 以2015-2016-2 为例
+                        # 以2015-2016-2 为例
             year_start  # 2015
             year_end    # 2016
             number      # 2
@@ -138,8 +135,8 @@ class Semester:
 
     def equals(self, other_semester):
         if (self.year_start == other_semester.year_start and
-                    self.year_end == other_semester.year_end and
-                    self.number == other_semester.number):
+                self.year_end == other_semester.year_end and
+                self.number == other_semester.number):
             return True
         else:
             return False
@@ -158,12 +155,11 @@ class Student:
             grade_data:     # 学期成绩信息的列表， class Grades_data 的 list
     '''
 
-    def __init__(self, student_name, student_id, student_year, class_id, gender, major, source):
+    def __init__(self, student_name, student_id, student_year, class_id, major, source):
         self.student_id = student_id
         self.student_name = student_name
         self.student_year = student_year
         self.class_id = class_id
-        self.gender = gender
         self.major = major
         self.source = source
         self.msg = []
@@ -193,9 +189,6 @@ class Student:
     def get_grades_data(self):
         return self.grades_data
 
-    def get_gender(self):
-        return self.gender
-
     def get_major(self):
         return self.major
 
@@ -222,7 +215,7 @@ class Student:
         for gd in self.grades_data:
             gd.show()
 
-    def calculate_gpa(self, semesters):
+    def calculate_gpa(self, semesters, return_credit=False):
         '''To calculate the student's GPA'''
         gpa_list, credit_list = [], []
         for semester in semesters:
@@ -237,9 +230,12 @@ class Student:
         gpa = np.asarray(gpa_list)
         credit = np.asarray(credit_list)
         gpa_average = np.dot(gpa.T, credit) / credit.sum()
-        return gpa_average
+        if return_credit:
+            return gpa_average, credit.sum()
+        else:
+            return gpa_average
 
-    def calculate_caa(self, semesters):
+    def calculate_caa(self, semesters, return_credit=False):
         '''To calculate the student's cumulative academic average.'''
         caa_list, credit_list = [], []
         for semester in semesters:
@@ -254,7 +250,10 @@ class Student:
         caa = np.asarray(caa_list)
         credit = np.asarray(credit_list)
         caa_average = np.dot(caa.T, credit) / credit.sum()
-        return caa_average
+        if return_credit:
+            return caa_average, credit.sum()
+        else:
+            return caa_average
 
 
 class Grades_data:
@@ -361,10 +360,25 @@ class Controler:
 
         self.studentyear_semester_dic = {}
         self.data_list = []
+        self.student_dic = {}
+
+        self.read_files()
+        self.init_student_dic()
+        self.update()
+
+    def read_files(self):
         # file_name exemple: F1526002-2015-2016-1.xls
         for file_name in self.file_list:
-            print(file_name, file_name[1:3], file_name[1:3] == "15")
+            # 检查file_name
+            suffix = file_name.split(".")[-1]
+            if suffix != "xls":
+                print("无法读取", file_name, "文件!")
+                self.add_msg("无法读取" + file_name + "文件!")
+                self.file_list.remove(file_name)
+                continue
+            # 从班级号中识别学生的年级
             student_year = "20" + file_name[1:3]
+            # 从file_name中识别学期
             fn_split_list = file_name.split('.')[0].split('-')
             semester = Semester(fn_split_list[1], fn_split_list[2], fn_split_list[3])
             semester = semester.to_str()
@@ -374,11 +388,6 @@ class Controler:
             else:
                 self.studentyear_semester_dic[student_year] = [semester]
             self.data_list.append(self.load_xls(file_name))
-
-        print(self.studentyear_semester_dic)
-        self.student_dic = {}
-        self.init_student_dic()
-        self.update()
 
     def clean_msg(self):
         self.msg = []
@@ -403,6 +412,7 @@ class Controler:
             msg.append("缺少{}级学生的成绩！".format(student_year))
         return flag, msg
 
+    # 初始化学生信息
     def init_student_dic(self):
         student_list_dir = "../student_list"
         file_name_list = os.listdir(student_list_dir)
@@ -411,46 +421,68 @@ class Controler:
             file_path = os.path.join(student_list_dir, file_name)
             excel = pd.read_excel(file_path, sheet_name="录取结果")
             student_year = file_name[0:5]
+            # print("#debug", "excel columns", excel.columns)
+            # print("#debug", "excel index", excel.index)
             for i in range(len(excel["姓名"])):
                 student_name = excel["姓名"][i]
                 student_id = excel["学号"][i]
                 class_id = excel["班级"][i]
-                gender = excel["性别"][i]
                 major = excel["录取专业"][i]
                 source = excel["招生来源"][i]
 
-                self.student_dic[student_name] = Student(student_name, student_id, student_year, class_id, gender,
+                self.student_dic[student_name] = Student(student_name, student_id, student_year, class_id,
                                                          major, source)
 
     def load_xls(self, file_name):
-        data = pd.read_html(os.path.join(self.data_path, file_name), encoding='utf-8')
-        return data[0]
+        # TODO xls
+        file_path = os.path.join(self.data_path, file_name)
+        try:
+            print(file_name)
+            data = pd.read_html(file_path, encoding='utf-8')
+            # 改columns名称
+            data = data[0]
+            columns = data[0:1].values[0]
+            data = data[1:].values
+            ans = pd.DataFrame(data, columns=columns)
+            return ans
+        except ValueError as e:
+            print(file_name, "is wrong!")
+            print("file_list:", len(self.file_list))
+            # self.file_list.remove(file_name)
+            print("file_list_apres:", len(self.file_list))
+            ans = pd.read_excel(file_path, encoding='utf-8')
+            print("ceshi \n", ans)
+            return ans
 
-    # 将读取的数据转换为数据结构
+    # 读取学生成绩信息并转换为数据结构
     def update(self):
         # 遍历所有xls文件
+        print("len", len(self.data_list), len(self.file_list))
         for sheet, file_name in zip(self.data_list, self.file_list):
+            print(file_name)
             # xls文件名上有 班级，学期信息
             fn = file_name.split('.')[0].split('-')
             _, year_start, year_end, number = fn
             semester = Semester(year_start, year_end, number)
             # 将sheet转换为numpy形式
-            sheet = np.asarray(sheet)
+            sheet_np = np.asarray(sheet)
             # sheet第一行有课程名称信息
-            index = sheet[0]
+            index = sheet_np[0]
             # 对sheet从第二行开始按行遍历
-            for i in range(1, sheet.shape[0]):
+
+            for i in range(len(sheet["学号"])):
                 # 获取学号、姓名、班级信息
-                student_id = sheet[i, 0]
-                student_name = sheet[i, 1]
-                class_id = sheet[i, 2]
+                student_id = sheet["学号"][i]  # sheet[i, 0]
+                student_name = sheet["姓名"][i]  # sheet[i, 1]
+                class_id = sheet["班号"][i]  # sheet[i, 2]
+
                 # 对这一行的每一列从第四列开始遍历，步长为2，因为有学分列
                 grades = []
-                for j in range(3, sheet.shape[1], 2):
+                for j in range(3, sheet_np.shape[1], 2):
                     # 如果为nan，说明数据为空，不读入
-                    if sheet[i, j] is not np.nan:
+                    if sheet_np[i, j] is not np.nan:
                         # 新建一个Grade类型的数据，课程名，学分，该学生的成绩
-                        grade = Grade(index[j], sheet[i, j + 1], sheet[i, j])
+                        grade = Grade(index[j], sheet_np[i, j + 1], sheet_np[i, j])
                         grades.append(grade)
                 # 新建一个Grades_data类型的数据，学期，成绩list
                 grades_data = Grades_data(semester, grades)
@@ -467,7 +499,8 @@ class Controler:
     def get_student_dic(self, student_year, class_id=None, student_id=None):
         res_dic_raw = {}
         for student_name, student in self.student_dic.items():
-            if student.get_student_year() == student_year:
+            # print("#debug student_year", student.get_student_year(), "grade", student_year)
+            if student.get_student_year()[:-1] == student_year[:-1]:
                 res_dic_raw[student_name] = student
 
         res_dic = {}
@@ -499,7 +532,8 @@ class Controler:
 
     # 输出Excel表格
     def write_excel(self, students, semesters, config, save=False):
-
+        print("students", students)
+        print("semesters", semesters)
         self.config = config
         # 输出路径
         if save:
@@ -508,11 +542,13 @@ class Controler:
 
             writer = pd.ExcelWriter(os.path.join(self.config.output_path, self.config.file_name))
         # 表头
-        index = ["姓名", "学号", "班级", "性别", "专业", "招生来源"]
+        index = ["姓名", "学号", "班级", "专业", "招生来源"]
         if self.config.cal_gpa:
             index.append("GPA")
+            index.append("GPA总学分")
         if self.config.cal_caa:
             index.append("学积分")
+            index.append("学积分总学分")
 
         if self.config.sort_by_major and self.config.sort_by_source:
             group_dic = {}
@@ -524,6 +560,7 @@ class Controler:
 
             dfs = []
             for group_name, group in group_dic.items():
+                print("1")
                 lines = self.get_content(group, semesters)
                 df = self.get_dataframe(lines, index)
                 if save:
@@ -543,6 +580,7 @@ class Controler:
 
             dfs = []
             for group_name, group in group_dic.items():
+                print("2")
                 lines = self.get_content(group, semesters)
                 df = self.get_dataframe(lines, index)
                 if save:
@@ -562,6 +600,7 @@ class Controler:
 
             dfs = []
             for group_name, group in group_dic.items():
+                print("3")
                 lines = self.get_content(group, semesters)
                 df = self.get_dataframe(lines, index)
                 if save:
@@ -572,16 +611,18 @@ class Controler:
             return dfs, self.get_msg()
 
         else:
+            print("4", students, semesters)
             lines = self.get_content(students, semesters)
             df = self.get_dataframe(lines, index)
             if save:
-                print("here4")
                 df.to_excel(writer, "sheet1")
                 writer.save()
             return df, self.get_msg()
 
     def get_dataframe(self, lines, index):
         # 转换为pandas.Dataframe, 并排序
+        print("lines:", lines)
+        print("index", index)
         df = pd.DataFrame(data=lines, columns=index)
         if self.config.sort_by_gpa:
             df = df.sort_values(by=['GPA'], ascending=False)
@@ -590,11 +631,14 @@ class Controler:
         else:
             df = df.sort_values(by=['学号'], ascending=True)
 
+        print("==========config==============")
+        self.config.show()
         # 排名数据
         if self.config.cal_gpa or self.config.cal_caa:
             rank = df.rank(axis=0, method='min', numeric_only=True, na_option='keep', ascending=False, pct=False)
 
             if self.config.cal_gpa:
+                print(df)
                 rank_gpa = [-1 for _ in range(len(rank['GPA']))]
                 for x in range(len(rank['GPA'])):
                     if not math.isnan(rank['GPA'][x]):
@@ -610,7 +654,7 @@ class Controler:
                 rank_caa = {'rank_caa': rank_caa}
                 rank_caa = pd.DataFrame(rank_caa)
                 df['学积分排名'] = rank_caa
-
+        print(df)
         return df
 
     def get_content(self, students, semesters):
@@ -620,16 +664,20 @@ class Controler:
             line.append(student.get_student_name())
             line.append(student.get_student_id())
             line.append(student.get_class_id())
-            line.append(student.get_gender())
+
             line.append(student.get_major())
             line.append(student.get_source())
 
             if self.config.cal_gpa:
                 # student.clean_msg()
-                line.append(student.calculate_gpa(semesters))
+                gpa, credit_gpa = student.calculate_gpa(semesters, return_credit=True)
+                line.append(gpa)
+                line.append(credit_gpa)
             if self.config.cal_caa:
                 # student.clean_msg()
-                line.append(student.calculate_caa(semesters))
+                caa, credit_caa = student.calculate_caa(semesters, return_credit=True)
+                line.append(caa)
+                line.append(credit_gpa)
 
             student_msg = student.get_msg()
             if student_msg != []:
