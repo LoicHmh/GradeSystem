@@ -97,6 +97,9 @@ class Config():
     def set_output_path(self, output_path):
         self.output_path = output_path
 
+    def set_student_list_path(self, student_list_path):
+        self.student_list_path = student_list_path
+
     def set_cal_gpa(self, cal_gpa):
         self.cal_gpa = cal_gpa
 
@@ -225,8 +228,8 @@ class Student:
                 gpa_list.append(gpa)
                 credit_list.append(credit)
             else:
-                print("没有找到 ", self.student_name, semester.to_str(), "学期成绩 ")
-                self.add_msg("没有找到 {} {} 学期成绩".format(self.student_name, semester.to_str()))
+                print("没有找到 ", self.class_id, self.student_name, semester.to_str(), "学期成绩 ")
+                self.add_msg("没有找到 {} {} {} 学期成绩".format(self.class_id, self.student_name, semester.to_str()))
         gpa = np.asarray(gpa_list)
         credit = np.asarray(credit_list)
         gpa_average = np.dot(gpa.T, credit) / credit.sum()
@@ -245,8 +248,8 @@ class Student:
                 caa_list.append(caa)
                 credit_list.append(credit)
             else:
-                print("没有找到 ", self.student_name, semester.to_str(), "学期成绩 ")
-                self.add_msg("没有找到 {} {} 学期成绩".format(self.student_name, semester.to_str()))
+                print("没有找到 ", self.class_id, self.student_name, semester.to_str(), "学期成绩 ")
+                self.add_msg("没有找到 {} {} {} 学期成绩".format(self.class_id, self.student_name, semester.to_str()))
         caa = np.asarray(caa_list)
         credit = np.asarray(credit_list)
         caa_average = np.dot(caa.T, credit) / credit.sum()
@@ -489,8 +492,8 @@ class Controler:
 
                 # 检查这个学生是否已经存在
                 if student_name not in self.student_dic:
-                    print("缺少" + student_name + "的基本信息！")
-                    self.add_msg("缺少" + student_name + "的基本信息！")
+                    print("缺少" + class_id + student_name + "的基本信息！")
+                    self.add_msg("缺少" + class_id + student_name + "的基本信息！")
                     continue
                 # 将这一学期的成绩添加到这个学生的数据中
                 self.student_dic[student_name].add_grades_data(grades_data)
@@ -962,10 +965,11 @@ class UI(QMainWindow):
         self.resultGroupBox = QGroupBox("查询结果")
         gridlayout = QGridLayout()
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(11)
         self.table.setRowCount(100)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tableClass = ["学号", "姓名", "班级", "招生来源", "专业", "GPA", "GPA排名", "学积分", "学积分排名"]
+        self.tableClass = ["学号", "姓名", "班级", "招生来源", "专业", "GPA", "GPA总学分", "GPA排名",
+                           "学积分", "学积分总学分", "学积分排名"]
         self.table.setHorizontalHeaderLabels(self.tableClass)
         for index in range(self.table.columnCount()):
             item = self.table.horizontalHeaderItem(index)
@@ -1113,9 +1117,8 @@ class UI(QMainWindow):
                     data = temp_data
                     break
 
-        print(type(data))
         self.table.clearContents()
-        for col in range(data.shape[1] - 1):
+        for col in range(data.shape[1]):
             templist = np.array(data[self.tableClass[col]]).tolist()
             for row in range(data.shape[0]):
                 newItem = QTableWidgetItem(str(templist[row]))
@@ -1188,4 +1191,3 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = UI()
     sys.exit(app.exec_())
-
